@@ -1,0 +1,83 @@
+name: Create GitHub Issue from Jira
+
+on:
+  repository_dispatch:
+    types: [jira-to-github-issue]
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create GitHub Issue and Assign to Copilot
+        id: create_issue
+        env:
+          GB_TOKEN: ${{ secrets.GB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          JIRA_ISSUE_KEY: ${{ github.event.client_payload.jira_key }}
+          JIRA_SUMMARY: ${{ github.event.client_payload.summary }}
+          JIRA_DESCRIPTION: ${{ github.event.client_payload.description }}
+          JIRA_ISSUE_URL: ${{ github.event.client_payload.url }}
+          JIRA_PRIORITY: ${{ github.event.client_payload.priority }}
+          JIRA_ISSUE_TYPE: ${{ github.event.client_payload.issue_type }}
+        run: |
+          python scripts/create_issue.py
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## Jira to GitHub Issue Workflow" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Jira Issue:** ${{ github.event.client_payload.jira_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Jira URL:** ${{ github.event.client_payload.url }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Issue created successfully and assigned to GitHub Copilot coding agent" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Failed to create issue. Check logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueBody = `
+            ## ⚠️ Workflow Failure: Jira to GitHub Issue
+
+            **Workflow:** ${context.workflow}
+            **Run:** ${context.runNumber}
+            **Jira Issue:** ${{ github.event.client_payload.jira_key }}
+            **Jira URL:** ${{ github.event.client_payload.url }}
+
+            **Error:** Failed to create GitHub issue from Jira ticket.
+
+            [View workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Jira-GitHub Integration Failure',
+              body: issueBody,
+              labels: ['automation-failure', 'urgent']
+            });
