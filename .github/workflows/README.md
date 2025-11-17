@@ -1,28 +1,50 @@
-# Jira to GitHub Copilot Agent Integration
+# Jira to GitHub Copilot Agent Integration via MCP
 
-This workflow automatically creates GitHub issues from Jira tickets and assigns them to GitHub Copilot coding agent for autonomous implementation.
+This **centralized agent repository** orchestrates GitHub issue creation across multiple target repositories via MCP (Model Context Protocol). When a Jira label is added, the workflow connects to the target repository via MCP, creates an issue, and assigns it to GitHub Copilot coding agent.
+
+## 🏗️ Architecture
+
+```
+Jira Automation (webhook)
+    ↓
+jira-github-codingagent (this repo - GitHub Actions)
+    ↓ (MCP GitHub tools)
+Target Repository (cms-project, api-project, etc.)
+    ↓
+GitHub Issue + @github assignment
+    ↓
+Copilot Coding Agent (autonomous implementation)
+```
+
+**Benefits:**
+- ✅ Centralized orchestration logic in one repo
+- ✅ Support multiple target repositories without duplicating workflows
+- ✅ MCP provides clean abstraction over GitHub API
+- ✅ Easy to extend with additional integrations
 
 ## 🔧 Setup Instructions
 
 ### 1. Configure GitHub Repository Secrets
 
-Go to your **cms-project** repository **Settings → Secrets and variables → Actions** and verify:
+Go to this **jira-github-codingagent** repository **Settings → Secrets and variables → Actions** and add:
 
-- `GB_TOKEN` - Already available by default (no action needed)
+- `GB_TOKEN` - GitHub Personal Access Token with `repo` and `workflow` scopes for target repositories
 
-### 2. Configure Jira Automation
+### 2. Configure Jira Automation (Label-Based Routing)
 
-Create a new automation rule in Jira:
+Create automation rules in Jira for each target repository:
 
-**Trigger:** Issue labeled with `Auto-Copilot`
+#### Option A: Single Repository (cms-project)
+
+**Trigger:** Issue labeled with `Auto-Copilot-CMS`
 
 **Action:** Send web request
 
 ```
-URL: https://api.github.com/repos/Karthi-Knackforge/cms-project/dispatches
+URL: https://api.github.com/repos/Karthi-Knackforge/jira-github-codingagent/dispatches
 Method: POST
 Headers:
-  Authorization: Bearer KEY
+  Authorization: Bearer YOUR_GITHUB_TOKEN
   Accept: application/vnd.github+json
   X-GitHub-Api-Version: 2022-11-28
 
@@ -30,6 +52,8 @@ Body (Custom data - JSON):
 {
   "event_type": "jira-to-github-issue",
   "client_payload": {
+    "target_owner": "Karthi-Knackforge",
+    "target_repo": "cms-project",
     "jira_key": "{{issue.key}}",
     "summary": "{{issue.summary}}",
     "description": "{{issue.description}}",
@@ -40,26 +64,43 @@ Body (Custom data - JSON):
 }
 ```
 
-### 3. Enable GitHub Actions
+#### Option B: Multiple Repositories
 
-Ensure Actions are enabled in your **cms-project** repository:
-- Go to **Settings → Actions → General**
-- Allow all actions and reusable workflows
+Create separate rules for each target:
+
+**For API Project:** Label = `Auto-Copilot-API`, `target_repo` = `api-project`
+**For Frontend:** Label = `Auto-Copilot-Frontend`, `target_repo` = `frontend-app`
+**For Mobile:** Label = `Auto-Copilot-Mobile`, `target_repo` = `mobile-app`
+
+Each rule sends to the **same agent repo** (`jira-github-codingagent/dispatches`) but with different `target_repo` in payload.
+
+### 3. Install MCP GitHub Server
+
+The workflow uses MCP to connect to target repositories. Ensure Node.js is available in GitHub Actions (already included in `ubuntu-latest`).
+
+The MCP GitHub server (`@modelcontextprotocol/server-github`) is installed automatically via `npx` during workflow execution.
+
+### 4. Enable GitHub Actions
+
+Ensure Actions are enabled in:
+- **This repo** (`jira-github-codingagent`): Main orchestration
+- **Target repos** (`cms-project`, etc.): Where issues are created
 
 ## 🎯 How It Works
 
-1. **Jira Trigger**: When you add the `Auto-Copilot` label to a Jira issue
-2. **Webhook**: Jira sends a `repository_dispatch` event to GitHub
-3. **Deduplication**: Script checks if an issue already exists for this Jira key
-4. **Issue Creation**: If new, creates a GitHub issue with:
+1. **Jira Trigger**: Add label like `Auto-Copilot-CMS` to a Jira issue
+2. **Webhook to Agent Repo**: Jira sends `repository_dispatch` to this centralized agent repo
+3. **MCP Connection**: GitHub Actions connects to target repository via MCP GitHub server
+4. **Deduplication**: Searches target repo for existing issue with this Jira key
+5. **Issue Creation via MCP**: If new, creates GitHub issue in target repo with:
    - Structured format optimized for Copilot understanding
    - Requirements and Acceptance Criteria sections
    - Link back to original Jira ticket
    - Automatic labels: `jira-sync`, `copilot-agent`, `priority-{level}`
-5. **Copilot Assignment**: Issue is automatically assigned to `@github` (GitHub Copilot coding agent)
-6. **Autonomous Work**: Copilot coding agent:
+6. **Copilot Assignment**: Issue assigned to `@github` (GitHub Copilot coding agent)
+7. **Autonomous Work in Target Repo**: Copilot coding agent:
    - Analyzes the requirements
-   - Creates a development branch (copilot/*)
+   - Creates a development branch (`copilot/*`)
    - Implements the solution
    - Runs tests and validation
    - Opens a pull request for review
