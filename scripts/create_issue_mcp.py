@@ -197,6 +197,33 @@ def create_github_issue() -> Dict[str, Any]:
         sys.exit(1)
 
 
+def add_copilot_comment(issue_number: int) -> bool:
+    """
+    Add a comment to the issue to trigger Copilot coding agent.
+    This is an alternative to assignment that works with Copilot Pro.
+    
+    Returns:
+        True if comment was added successfully, False otherwise
+    """
+    comment_url = f"{GITHUB_API_BASE}/repos/{TARGET_REPO_OWNER}/{TARGET_REPO_NAME}/issues/{issue_number}/comments"
+    
+    comment_body = f"@{GITHUB_COPILOT_USERNAME} please implement this issue"
+    
+    try:
+        response = requests.post(
+            comment_url,
+            headers=get_github_headers(),
+            json={"body": comment_body}
+        )
+        response.raise_for_status()
+        print(f"✅ Added comment to trigger @{GITHUB_COPILOT_USERNAME}")
+        return True
+    
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  Could not add Copilot comment: {e}")
+        return False
+
+
 def main():
     """Main execution flow."""
     print("🚀 Starting Jira to GitHub Issue workflow...")
@@ -223,11 +250,21 @@ def main():
     
     issue_number = issue.get("number")
     issue_url = issue.get("html_url")
+    assignees = issue.get("assignees", [])
     
     print(f"✅ Successfully created issue #{issue_number}")
     print(f"🔗 URL: {issue_url}")
-    print(f"🤖 Assigned to: @{GITHUB_COPILOT_USERNAME} (GitHub Copilot coding agent)")
-    print(f"🏷️  Labels: {', '.join(issue.get('labels', []))}")
+    
+    # Check if Copilot was successfully assigned
+    if any(assignee.get("login") == GITHUB_COPILOT_USERNAME for assignee in assignees):
+        print(f"🤖 Assigned to: @{GITHUB_COPILOT_USERNAME} (GitHub Copilot coding agent)")
+    else:
+        print(f"⚠️  @{GITHUB_COPILOT_USERNAME} assignment not available")
+        print("💬 Attempting to trigger Copilot via comment...")
+        add_copilot_comment(issue_number)
+    
+    labels = [label.get("name") if isinstance(label, dict) else label for label in issue.get("labels", [])]
+    print(f"🏷️  Labels: {', '.join(labels)}")
     
     # Output for GitHub Actions summary
     print(f"\n::notice title=Issue Created::Created issue #{issue_number} in {TARGET_REPO_OWNER}/{TARGET_REPO_NAME}")
