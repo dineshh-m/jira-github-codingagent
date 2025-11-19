@@ -1,0 +1,133 @@
+name: Jira to GitHub Issue with Copilot Assignment (Full Context)
+
+on:
+  repository_dispatch:
+    types: [jira-to-github-copilot, jira-to-copilot-with-context]
+
+jobs:
+  create-issue-and-assign-copilot:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout Agent Repository
+        uses: actions/checkout@v4
+        with:
+          path: agent-repo
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r agent-repo/requirements.txt
+          pip install PyGithub
+
+      - name: Create Branch and Sync Project Context
+        id: sync_context
+        env:
+          GITHUB_TOKEN: ${{ secrets.GB_TOKEN }}
+          TARGET_REPO_OWNER: ${{ github.event.client_payload.target_owner || 'Karthi-Knackforge' }}
+          TARGET_REPO_NAME: ${{ github.event.client_payload.target_repo || 'cms-project' }}
+          JIRA_ISSUE_KEY: ${{ github.event.client_payload.jira_key }}
+          AGENT_REPO_PATH: ${{ github.workspace }}/agent-repo
+        run: |
+          python agent-repo/scripts/sync_context_to_branch.py
+
+      - name: Create GitHub Issue with Context
+        id: create_issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GB_TOKEN }}
+          TARGET_REPO_OWNER: ${{ github.event.client_payload.target_owner || 'Karthi-Knackforge' }}
+          TARGET_REPO_NAME: ${{ github.event.client_payload.target_repo || 'cms-project' }}
+          JIRA_ISSUE_KEY: ${{ github.event.client_payload.jira_key }}
+          JIRA_SUMMARY: ${{ github.event.client_payload.summary }}
+          JIRA_DESCRIPTION: ${{ github.event.client_payload.description }}
+          JIRA_ISSUE_URL: ${{ github.event.client_payload.url }}
+          JIRA_PRIORITY: ${{ github.event.client_payload.priority || 'Medium' }}
+          JIRA_ISSUE_TYPE: ${{ github.event.client_payload.issue_type || 'Task' }}
+          CONTEXT_BRANCH: ${{ env.CONTEXT_BRANCH }}
+        run: |
+          python agent-repo/scripts/create_issue_with_context.py
+
+      - name: Assign Issue to Copilot Agent
+        id: assign_copilot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GB_TOKEN }}
+          TARGET_REPO_OWNER: ${{ github.event.client_payload.target_owner || 'Karthi-Knackforge' }}
+          TARGET_REPO_NAME: ${{ github.event.client_payload.target_repo || 'cms-project' }}
+          ISSUE_NUMBER: ${{ env.ISSUE_NUMBER }}
+          CONTEXT_BRANCH: ${{ env.CONTEXT_BRANCH }}
+        run: |
+          python agent-repo/scripts/assign_to_copilot.py
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🤖 Jira to GitHub + Copilot Workflow" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Jira Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Issue:** ${{ github.event.client_payload.jira_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Title:** ${{ github.event.client_payload.summary }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${{ github.event.client_payload.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Target Repository" >> $GITHUB_STEP_SUMMARY
+          echo "- **Owner:** ${{ github.event.client_payload.target_owner }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repo:** ${{ github.event.client_payload.target_repo }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ ! -z "$CONTEXT_BRANCH" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🌿 Context Branch" >> $GITHUB_STEP_SUMMARY
+            echo "- **Branch:** \`$CONTEXT_BRANCH\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Docs Synced:** ✅ Project context files copied" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ ! -z "$ISSUE_NUMBER" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🎫 GitHub Issue" >> $GITHUB_STEP_SUMMARY
+            echo "- **Issue #:** $ISSUE_NUMBER" >> $GITHUB_STEP_SUMMARY
+            echo "- **Assigned to:** @copilot-swe-agent" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Success!** Copilot agent is working on the issue with full project context." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Failed.** Check logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GB_TOKEN }}
+          script: |
+            const issueBody = `
+            ## ⚠️ Workflow Failure: Jira to GitHub + Copilot
+
+            **Workflow:** ${context.workflow}
+            **Run:** ${context.runNumber}
+            **Jira Issue:** ${{ github.event.client_payload.jira_key }}
+            **Jira URL:** ${{ github.event.client_payload.url }}
+            **Target Repo:** ${{ github.event.client_payload.target_owner }}/${{ github.event.client_payload.target_repo }}
+
+            **Error:** Failed to create GitHub issue and assign to Copilot agent.
+
+            [View workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Jira-GitHub-Copilot Integration Failure',
+              body: issueBody,
+              labels: ['automation-failure', 'urgent']
+            });
