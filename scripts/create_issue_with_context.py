@@ -100,9 +100,11 @@ def create_copilot_optimized_issue_body() -> str:
     
     issue_body = f"""## 🤖 Instructions for @copilot
 
+**Development Branch:** `{CONTEXT_BRANCH}`
+
 **IMPORTANT:** This issue has full project context available. Please:
 
-1. **Switch to branch:** `{CONTEXT_BRANCH}`
+1. **Work on the linked branch:** `{CONTEXT_BRANCH}` (see Development section →)
 2. **Read the project documentation** in the `docs/` directory:
    - `docs/architecture/overview.md` - System architecture and tech stack
    - `docs/api-standards/` - API naming conventions and CRUD specifications
@@ -110,6 +112,7 @@ def create_copilot_optimized_issue_body() -> str:
    - `docs/react/` - React component structure, state management, API consumption, testing
 3. **Follow the established patterns** defined in the documentation
 4. **Implement the requirements** described below
+5. **Create a PR** from `{CONTEXT_BRANCH}` when ready
 
 ---
 
@@ -143,6 +146,14 @@ This repository follows strict coding standards. All patterns, conventions, and 
 - Laravel patterns for backend implementation
 - React patterns for frontend implementation
 - Testing standards for test coverage
+
+---
+
+## 🌿 Development
+
+**Branch:** `{CONTEXT_BRANCH}`
+
+This issue is linked to the `{CONTEXT_BRANCH}` branch. All implementation work should be done on this branch, and a PR should be created from this branch to the main branch when ready.
 
 ---
 
@@ -200,6 +211,125 @@ def create_github_issue() -> Dict[str, Any]:
         sys.exit(1)
 
 
+def link_issue_to_branch(issue_number: int) -> bool:
+    """
+    Link the GitHub issue to the development branch using GitHub's API.
+    
+    This creates a development branch link that:
+    - Shows the branch in the issue's "Development" section
+    - Helps Copilot understand which branch to work on
+    - Provides better traceability
+    
+    Uses GraphQL API for creating the link.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    print(f"🔗 Linking issue #{issue_number} to branch {CONTEXT_BRANCH}...")
+    
+    try:
+        # Get repository ID first
+        repo_query = """
+        query($owner: String!, $name: String!) {
+            repository(owner: $owner, name: $name) {
+                id
+            }
+        }
+        """
+        
+        graphql_url = f"{GITHUB_API_BASE}/graphql"
+        
+        repo_response = requests.post(
+            graphql_url,
+            headers=get_github_headers(),
+            json={
+                "query": repo_query,
+                "variables": {
+                    "owner": TARGET_REPO_OWNER,
+                    "name": TARGET_REPO_NAME
+                }
+            },
+            timeout=10
+        )
+        
+        if repo_response.status_code != 200:
+            print(f"⚠️  Failed to get repository ID: {repo_response.status_code}")
+            return False
+        
+        repo_data = repo_response.json()
+        if "errors" in repo_data:
+            print(f"⚠️  GraphQL errors getting repo: {repo_data['errors']}")
+            return False
+        
+        repo_id = repo_data["data"]["repository"]["id"]
+        
+        # Get issue node ID
+        issue_url = f"{GITHUB_API_BASE}/repos/{TARGET_REPO_OWNER}/{TARGET_REPO_NAME}/issues/{issue_number}"
+        issue_response = requests.get(issue_url, headers=get_github_headers(), timeout=10)
+        
+        if issue_response.status_code != 200:
+            print(f"⚠️  Failed to get issue details: {issue_response.status_code}")
+            return False
+        
+        issue_data = issue_response.json()
+        issue_node_id = issue_data.get("node_id")
+        
+        if not issue_node_id:
+            print("⚠️  Could not get issue node_id")
+            return False
+        
+        # Create linked branch mutation
+        # This links the branch to the issue in the Development section
+        mutation = """
+        mutation($input: CreateLinkedBranchInput!) {
+            createLinkedBranch(input: $input) {
+                linkedBranch {
+                    id
+                    ref {
+                        name
+                    }
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "input": {
+                "repositoryId": repo_id,
+                "issueId": issue_node_id,
+                "name": CONTEXT_BRANCH,
+                "oid": None  # Will use the branch HEAD
+            }
+        }
+        
+        link_response = requests.post(
+            graphql_url,
+            headers=get_github_headers(),
+            json={"query": mutation, "variables": variables},
+            timeout=10
+        )
+        
+        if link_response.status_code != 200:
+            print(f"⚠️  Failed to link branch: {link_response.status_code}")
+            # Don't fail completely, branch linking is nice-to-have
+            return False
+        
+        result = link_response.json()
+        
+        if "errors" in result:
+            # Branch might already be linked or API might not be available
+            print(f"⚠️  Could not create branch link: {result['errors'][0].get('message', 'Unknown error')}")
+            return False
+        
+        print(f"✅ Successfully linked branch {CONTEXT_BRANCH} to issue #{issue_number}")
+        return True
+        
+    except Exception as e:
+        print(f"⚠️  Warning: Could not link branch to issue: {e}")
+        # Don't fail the entire workflow for this
+        return False
+
+
 def set_github_env(name: str, value: str):
     """Set environment variable for subsequent GitHub Actions steps."""
     github_env = os.environ.get('GITHUB_ENV')
@@ -243,6 +373,9 @@ def main():
     print(f"\n✅ Successfully created issue #{issue_number}")
     print(f"🔗 URL: {issue_url}")
     print(f"🌿 Context available on branch: {CONTEXT_BRANCH}")
+    
+    # Link the issue to the development branch
+    link_issue_to_branch(issue_number)
     
     # Set issue number for next step (Copilot assignment)
     set_github_env("ISSUE_NUMBER", str(issue_number))

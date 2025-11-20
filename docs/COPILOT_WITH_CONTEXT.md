@@ -183,6 +183,7 @@ When a Jira issue is labeled, the workflow automatically copies these documentat
 - Creates GitHub issue with title: `[JIRA-KEY] Summary`
 - Includes Jira requirements and acceptance criteria
 - References the context branch explicitly
+- **Links the issue to the development branch** (appears in Development section)
 - Adds instructions to read documentation
 - Applies labels: `copilot-ready`, `has-context`, `priority-{level}`
 

@@ -240,9 +240,13 @@ def add_copilot_instructions_comment() -> bool:
     
     comment_body = f"""## 🤖 @copilot - Implementation Instructions
 
-Hi @copilot! Please work on this issue following these steps:
+Hi @copilot! This issue is linked to the development branch `{CONTEXT_BRANCH}` (see Development section above).
 
-### 1️⃣ Switch to Context Branch
+Please work on this issue following these steps:
+
+### 1️⃣ Work on the Linked Branch
+The branch `{CONTEXT_BRANCH}` has been created and linked to this issue.
+
 ```bash
 git checkout {CONTEXT_BRANCH}
 ```
