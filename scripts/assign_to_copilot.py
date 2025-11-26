@@ -254,6 +254,7 @@ git checkout {CONTEXT_BRANCH}
 
 ### 2️⃣ Read Project Documentation
 Before implementing, please review the project standards in the `docs/` directory:
+    - Fetch the jira issue description/details for the issue {issue_num} to get more context.
 
 **Architecture & Standards:**
 - `docs/architecture/overview.md` - System architecture, tech stack, patterns
