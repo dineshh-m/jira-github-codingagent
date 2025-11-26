@@ -3,6 +3,8 @@ name: Jira to GitHub Issue with Copilot Assignment (Full Context)
 on:
   repository_dispatch:
     types: [jira-to-github-copilot, jira-to-copilot-with-context]
+  workflow_dispatch:
+
 
 jobs:
   create-issue-and-assign-copilot:
