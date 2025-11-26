@@ -91,11 +91,12 @@ def assign_copilot_to_issue() -> bool:
         # Step 3: Use GraphQL mutation to assign Copilot
         graphql_url = f"{GITHUB_API_BASE}/graphql"
         mutation = """
-        mutation($issueId: ID!, $assigneeIds: [ID!]!) {
-          addAssigneesToAssignable(input: {assignableId: $issueId, assigneeIds: $assigneeIds}) {
+        mutation($issueId: ID!, $actorIds: [ID!]!) {
+          replaceActorsForAssignable(input: {assignableId: $issueId, actorIds: $actorIds}) {
             assignable {
               ... on Issue {
-                number
+                id
+                title
                 assignees(first: 10) {
                   nodes {
                     login
@@ -109,7 +110,7 @@ def assign_copilot_to_issue() -> bool:
         
         variables = {
             "issueId": issue_node_id,
-            "assigneeIds": [copilot_id]
+            "actorIds": [copilot_id]
         }
         
         response = requests.post(
