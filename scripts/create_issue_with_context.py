@@ -104,13 +104,13 @@ def create_copilot_optimized_issue_body() -> str:
 
 **IMPORTANT:** This issue has full project context available. Please:
 
-1. **Work on the linked branch:** `{CONTEXT_BRANCH}` (see Development section →)
-2. **Read the project documentation** in the `docs/` directory:
+1. **Fetch the jira issue** description/details for the issue {JIRA_ISSUE_KEY} to get more context.
+2. **Work on the linked branch:** `{CONTEXT_BRANCH}` (see Development section →)
+3. **Read the project documentation** in the `docs/` directory:
    - `docs/architecture/overview.md` - System architecture and tech stack
    - `docs/api-standards/` - API naming conventions and CRUD specifications
    - `docs/laravel/` - Laravel patterns, database access, error handling, testing
    - `docs/react/` - React component structure, state management, API consumption, testing
-3. Fetch the jira issue description/details for the issue {JIRA_ISSUE_KEY} to get more context.
 4. **Follow the established patterns** defined in the documentation
 5. **Implement the requirements** described below
 6. **Create a PR** from `{CONTEXT_BRANCH}` when ready
