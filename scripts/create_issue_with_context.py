@@ -110,9 +110,10 @@ def create_copilot_optimized_issue_body() -> str:
    - `docs/api-standards/` - API naming conventions and CRUD specifications
    - `docs/laravel/` - Laravel patterns, database access, error handling, testing
    - `docs/react/` - React component structure, state management, API consumption, testing
-3. **Follow the established patterns** defined in the documentation
-4. **Implement the requirements** described below
-5. **Create a PR** from `{CONTEXT_BRANCH}` when ready
+3. Fetch the jira issue description/details for the issue {JIRA_ISSUE_KEY} to get more context.
+4. **Follow the established patterns** defined in the documentation
+5. **Implement the requirements** described below
+6. **Create a PR** from `{CONTEXT_BRANCH}` when ready
 
 ---
 
